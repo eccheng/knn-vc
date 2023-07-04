@@ -4,6 +4,14 @@
 
 ---
 
+## Voice interpolation
+
+I have added a small change to allow interpolating between different speakers' voices. This can be done with time-varying weights, allowing one voice to morph gradually into another throughout the duration of an utterance.
+
+Notebook: <a target="_blank" href="https://colab.research.google.com/github/eccheng/knn-vc/blob/master/knnvc_interpolation.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
+---
+
 Links:
 
 - Arxiv paper: [https://arxiv.org/abs/2305.18975](https://arxiv.org/abs/2305.18975)
