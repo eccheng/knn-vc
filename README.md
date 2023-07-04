@@ -1,6 +1,8 @@
 # Voice Conversion With Just Nearest Neighbors (kNN-VC)
 
-The official code repo! This repo contains training and inference code for kNN-VC -- an any-to-any voice conversion model from our paper, "Voice Conversion With Just k-Nearest Neighbors". The trained checkpoints are available under the 'Releases' tab and through `torch.hub`. 
+**Official repo:** https://github.com/bshall/knn-vc
+
+---
 
 Links:
 
