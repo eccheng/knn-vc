@@ -1,5 +1,6 @@
 
 from pathlib import Path
+from typing import Iterable
 
 import torch
 import torch.nn as nn
@@ -172,3 +173,46 @@ class KNeighborsVC(nn.Module):
         return pred_wav
 
 
+    @torch.inference_mode()
+    def match_interpolated(self, query_seq: Tensor, matching_sets: Iterable[Tensor], interp_weights: Tensor,
+              topk: int = 4, tgt_loudness_db: float | None = -16,
+              target_duration: float | None = None, device: str | None = None) -> Tensor:
+        """ Speaker-interpolated matching with multiple matching sets. Inputs:
+            - `query_seq`: Tensor (T, dim) of the input/source query features.
+            - `matching_sets`: Tensors (N, dim) of the matching set used as the 'training set' for the kNN algorithm.
+            - `interp_weights`: Tensor (T, n_sets) of interpolation weights, or shape (n_sets,) for static weights
+            - `topk`: k in the kNN -- the number of nearest neighbors to average over.
+            - `tgt_loudness_db`: float db used to normalize the output volume. Set to None to disable.
+            - `target_duration`: if set to a float, interpolate resulting waveform duration to be equal to this value in seconds.
+            - `device`: if None, uses default device at initialization. Otherwise uses specified device
+        Returns:
+            - converted waveform of shape (T,)
+        """
+        device = torch.device(device) if device is not None else self.device
+        query_seq = query_seq.to(device)
+        matching_sets = [matching_set.to(device) for matching_set in matching_sets]
+        interp_weights = interp_weights.to(device)
+
+        if target_duration is not None:
+            target_samples = int(target_duration*self.sr)
+            scale_factor = (target_samples/self.hop_length) / query_seq.shape[0] # n_targ_feats / n_input_feats
+            query_seq = F.interpolate(query_seq.T[None], scale_factor=scale_factor, mode='linear')[0].T
+
+        n_sets, n_frames, n_dim = len(matching_sets), query_seq.shape[0], next(iter(matching_sets)).shape[-1]
+
+        match_outs = torch.zeros(n_sets, n_frames, n_dim, device=device)
+        for i, matching_set in enumerate(matching_sets):
+            dists = fast_cosine_dist(query_seq, matching_set, device=device)
+            best = dists.topk(k=topk, largest=False, dim=-1)
+            match_outs[i] = matching_set[best.indices].mean(dim=1)
+
+        out_feats = (match_outs * interp_weights.reshape(-1, n_sets, 1).transpose(0,1)).sum(0)
+        prediction = self.vocode(out_feats[None].to(device)).cpu().squeeze()
+
+        # normalization
+        if tgt_loudness_db is not None:
+            src_loudness = torchaudio.functional.loudness(prediction[None], self.h.sampling_rate)
+            tgt_loudness = tgt_loudness_db
+            pred_wav = torchaudio.functional.gain(prediction, tgt_loudness - src_loudness)
+        else: pred_wav = prediction
+        return pred_wav
